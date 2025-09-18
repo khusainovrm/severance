@@ -11,6 +11,10 @@
       <div class="block">Второй блок</div>
       <div class="block">Третий блок</div>
     </section>
+
+    <a href="https://github.com/khusainovrm/severance" target="_blank" class="git-icon">
+      <img src="../assets/git.svg" alt="git" />
+    </a>
   </div>
 </template>
 
@@ -240,5 +244,15 @@ canvas {
   align-items: center;
   justify-content: center;
   font-size: 2rem;
+}
+
+.git-icon {
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  width: 50px;
+  height: 50px;
+  z-index: 2;
+  filter: invert(1);
 }
 </style>
