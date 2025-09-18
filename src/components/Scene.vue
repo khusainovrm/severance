@@ -31,20 +31,29 @@ gsap.registerPlugin(ScrollTrigger);
 const canvas = ref<HTMLCanvasElement | null>(null);
 const sceneSection = ref<HTMLElement | null>(null);
 
-let camera;
-let renderer;
+let camera: any;
+let renderer: any;
+let rafId = 0;
+let timeline: any = null;
+let resizeTimer: number | null = null;
 
 const onResize = () => {
-  if (!canvas.value) {
+  if (!canvas.value || !renderer || !camera) {
     return;
   }
-  const width = window.innerWidth;
-  const height = window.innerHeight;
+  const { width, height } = canvas.value.getBoundingClientRect();
   // Update camera
-  camera.aspect = width / height;
+  camera.aspect = width / height || 1;
   camera.updateProjectionMatrix();
 
-  renderer.setSize(width, height);
+  renderer.setSize(width, height, false);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+
+  // Debounce ScrollTrigger refresh to avoid thrashing during mobile UI show/hide
+  if (resizeTimer) window.clearTimeout(resizeTimer);
+  resizeTimer = window.setTimeout(() => {
+    ScrollTrigger.refresh();
+  }, 150);
 };
 
 onMounted(() => {
@@ -62,7 +71,8 @@ onMounted(() => {
   camera.position.set(0, 0, 7);
 
   renderer = new THREE.WebGLRenderer({ canvas: canvas.value, antialias: true });
-  renderer.setSize(width, height);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setSize(width, height, false);
 
   // === Двери (рамка) ===
   const doorMat = new THREE.MeshBasicMaterial({ color: '#1f1f1f' });
@@ -148,32 +158,34 @@ onMounted(() => {
   scene.add(bottomPortal);
 
   // Scroll-driven timeline
-  const tl = gsap.timeline({
+  timeline = gsap.timeline({
     scrollTrigger: {
       trigger: sceneSection.value,
       start: 'top top',
-      end: '+=4000', // длина виртуального скролла для анимации
+      end: () => '+=' + window.innerHeight * 4, // динамическая длина скролла относительно вьюпорта
       scrub: true,
       pin: true, // фиксируем секцию пока идет анимация
-      markers: true,
+      // markers: true,
+      anticipatePin: 1,
+      invalidateOnRefresh: true,
     },
   });
 
   // 0. Задержка 2 секунды
-  tl.to({}, { delay: 2 }, 0);
+  timeline.to({}, { delay: 2 }, 0);
 
   // 1. Закрытие дверей + схлопывание дорожки
-  tl.to(doorLeft.position, { x: -0.5, duration: 1 }, '>');
-  tl.to(doorRight.position, { x: 0.5, duration: 1 }, '<');
-  tl.to(
+  timeline.to(doorLeft.position, { x: -0.5, duration: 1 }, '>');
+  timeline.to(doorRight.position, { x: 0.5, duration: 1 }, '<');
+  timeline.to(
     lightOfCone.scale,
     { x: 0, duration: 1, onComplete: () => console.log('door closed') },
     "<'",
   );
-  tl.to(lightOfCone, { visible: false, duration: 1 }, '<');
+  timeline.to(lightOfCone, { visible: false, duration: 1 }, '<');
 
   // 2. Лифт едет к центру экрана
-  tl.to(
+  timeline.to(
     doorsGroup.position,
     {
       y: -1,
@@ -187,22 +199,22 @@ onMounted(() => {
   );
 
   // 3. Линия едет вверх
-  tl.to(line.position, { y: 20, duration: 6 }, '>');
+  timeline.to(line.position, { y: 20, duration: 6 }, '>');
 
   // 4. Появление люка в полу
-  tl.to(bottomPortal.position, { y: -4, duration: 1 }, '>');
+  timeline.to(bottomPortal.position, { y: -4, duration: 1 }, '>');
 
   // 5. Появление стульев
-  tl.to(char1.position, { x: -2, duration: 3 }, '>');
-  tl.to(char2.position, { x: 2, duration: 3 }, '<');
+  timeline.to(char1.position, { x: -2, duration: 3 }, '>');
+  timeline.to(char2.position, { x: 2, duration: 3 }, '<');
 
   // 6. Лифт уезжает под землю
-  tl.to(doorsGroup.position, { y: -5.5, duration: 3 }, '>');
-  tl.to(line.position, { y: 16, duration: 3 }, '<');
+  timeline.to(doorsGroup.position, { y: -5.5, duration: 3 }, '>');
+  timeline.to(line.position, { y: 16, duration: 3 }, '<');
 
   // === Рендер цикл ===
   function animate() {
-    requestAnimationFrame(animate);
+    rafId = requestAnimationFrame(animate);
     // камера всегда смотрит на лифт, пока он едет
     // camera.position.y = liftGroup.position.y;
     // camera.lookAt(0, liftGroup.position.y, 0);
@@ -220,6 +232,16 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('resize', onResize);
+  if (rafId) cancelAnimationFrame(rafId);
+  if (timeline) {
+    if (timeline.scrollTrigger) timeline.scrollTrigger.kill();
+    timeline.kill();
+    timeline = null;
+  }
+  // Dispose renderer to free WebGL context
+  if (renderer) {
+    renderer.dispose?.();
+  }
 });
 </script>
 
