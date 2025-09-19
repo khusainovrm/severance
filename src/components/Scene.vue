@@ -247,7 +247,7 @@ onUnmounted(() => {
 
 <style scoped>
 .scene-section {
-  height: 100vh;
+  height: calc(var(--vh, 1vh) * 100);
   position: relative;
   overflow: hidden;
 }
@@ -257,11 +257,11 @@ canvas {
   display: block;
 }
 .content {
-  min-height: 200vh;
+  min-height: calc(var(--vh, 1vh) * 200);
   background: #f0f0f0;
 }
 .block {
-  height: 100vh;
+  height: calc(var(--vh, 1vh) * 100);
   display: flex;
   align-items: center;
   justify-content: center;
