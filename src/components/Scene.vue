@@ -7,9 +7,9 @@
 
     <!-- Обычный контент после анимации -->
     <section class="content">
-      <div class="block">Первый блок</div>
-      <div class="block">Второй блок</div>
-      <div class="block">Третий блок</div>
+      <div class="block bg-teal-200">Первый блок</div>
+      <div class="block bg-amber-200">Второй блок</div>
+      <div class="block bg-gray-400">Третий блок</div>
     </section>
 
     <a href="https://github.com/khusainovrm/severance" target="_blank" class="git-icon">
@@ -28,6 +28,8 @@ import chair2 from '../assets/char2.png';
 
 gsap.registerPlugin(ScrollTrigger);
 
+ScrollTrigger.config({ ignoreMobileResize: true });
+
 const canvas = ref<HTMLCanvasElement | null>(null);
 const sceneSection = ref<HTMLElement | null>(null);
 
@@ -35,32 +37,28 @@ let camera: any;
 let renderer: any;
 let rafId = 0;
 let timeline: any = null;
-let resizeTimer: number | null = null;
 
 const onResize = () => {
   if (!canvas.value || !renderer || !camera) {
     return;
   }
-  const { width, height } = canvas.value.getBoundingClientRect();
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+
   // Update camera
   camera.aspect = width / height || 1;
   camera.updateProjectionMatrix();
 
   renderer.setSize(width, height, false);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-
-  // Debounce ScrollTrigger refresh to avoid thrashing during mobile UI show/hide
-  if (resizeTimer) window.clearTimeout(resizeTimer);
-  resizeTimer = window.setTimeout(() => {
-    ScrollTrigger.refresh();
-  }, 150);
 };
 
 onMounted(() => {
   if (!canvas.value) {
     return;
   }
-  const { width, height } = canvas.value.getBoundingClientRect();
+  const width = window.innerWidth;
+  const height = window.innerHeight;
 
   const scene = new THREE.Scene();
   const axesHelper = new THREE.AxesHelper(5);
@@ -168,6 +166,7 @@ onMounted(() => {
       // markers: true,
       anticipatePin: 1,
       invalidateOnRefresh: true,
+      scrub: 1,
     },
   });
 
@@ -247,7 +246,7 @@ onUnmounted(() => {
 
 <style scoped>
 .scene-section {
-  height: calc(var(--vh, 1vh) * 100);
+  height: 100dvh;
   position: relative;
   overflow: hidden;
 }
@@ -257,11 +256,11 @@ canvas {
   display: block;
 }
 .content {
-  min-height: calc(var(--vh, 1vh) * 200);
+  min-height: 200dvh;
   background: #f0f0f0;
 }
 .block {
-  height: calc(var(--vh, 1vh) * 100);
+  height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
