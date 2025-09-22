@@ -28,7 +28,8 @@ import chair2 from '../assets/char2.png';
 
 gsap.registerPlugin(ScrollTrigger);
 
-ScrollTrigger.config({ ignoreMobileResize: true });
+// ScrollTrigger.config({ ignoreMobileResize: true }); // fix issue with viewport on resize
+ScrollTrigger.normalizeScroll(true); // mobile address bar will always be present
 
 const canvas = ref<HTMLCanvasElement | null>(null);
 const sceneSection = ref<HTMLElement | null>(null);
@@ -61,8 +62,6 @@ onMounted(() => {
   const height = window.innerHeight;
 
   const scene = new THREE.Scene();
-  const axesHelper = new THREE.AxesHelper(5);
-  // scene.add(axesHelper);
   scene.background = new THREE.Color(0x000000);
 
   camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 100);
@@ -108,8 +107,8 @@ onMounted(() => {
   // === Световая дорожка (трапеция, статичная) ===
   const shape = new THREE.Shape();
   shape.lineTo(1.0, 1);
-  shape.lineTo(2, -10);
-  shape.lineTo(-2, -10);
+  shape.lineTo(5, -10);
+  shape.lineTo(-5, -10);
   shape.lineTo(-1.0, 1);
   shape.lineTo(1.0, 1);
 
@@ -161,53 +160,50 @@ onMounted(() => {
       trigger: sceneSection.value,
       start: 'top top',
       end: () => '+=' + window.innerHeight * 4, // динамическая длина скролла относительно вьюпорта
-      scrub: true,
       pin: true, // фиксируем секцию пока идет анимация
       // markers: true,
       anticipatePin: 1,
       invalidateOnRefresh: true,
       scrub: 1,
+      // snap: {
+      //   snapTo: 'labels', // скролл по меткам
+      //   duration: { min: 1, max: 2 },
+      //   ease: 'power1.inOut',
+      // },
+      // markers: true, // общие маркеры начала/конца
     },
   });
 
   // 0. Задержка 2 секунды
-  timeline.to({}, { delay: 2 }, 0);
+  // timeline.addLabel('step0');
+  // timeline.to({}, { delay: 2 }, 0);
 
   // 1. Закрытие дверей + схлопывание дорожки
+  timeline.addLabel('step1');
   timeline.to(doorLeft.position, { x: -0.5, duration: 1 }, '>');
   timeline.to(doorRight.position, { x: 0.5, duration: 1 }, '<');
-  timeline.to(
-    lightOfCone.scale,
-    { x: 0, duration: 1, onComplete: () => console.log('door closed') },
-    "<'",
-  );
+  timeline.to(lightOfCone.scale, { x: 0, duration: 1 }, '<');
   timeline.to(lightOfCone, { visible: false, duration: 1 }, '<');
 
   // 2. Лифт едет к центру экрана
-  timeline.to(
-    doorsGroup.position,
-    {
-      y: -1,
-      delay: 2,
-      duration: 1,
-      onStart: () => {
-        console.log('lift move');
-      },
-    },
-    '>',
-  );
+  timeline.addLabel('step2');
+  timeline.to(doorsGroup.position, { y: -1, delay: 2, duration: 1 }, '>');
 
   // 3. Линия едет вверх
+  // timeline.addLabel('step3');
   timeline.to(line.position, { y: 20, duration: 6 }, '>');
 
   // 4. Появление люка в полу
+  // timeline.addLabel('step4');
   timeline.to(bottomPortal.position, { y: -4, duration: 1 }, '>');
 
   // 5. Появление стульев
+  timeline.addLabel('step5');
   timeline.to(char1.position, { x: -2, duration: 3 }, '>');
   timeline.to(char2.position, { x: 2, duration: 3 }, '<');
 
   // 6. Лифт уезжает под землю
+  timeline.addLabel('step6');
   timeline.to(doorsGroup.position, { y: -5.5, duration: 3 }, '>');
   timeline.to(line.position, { y: 16, duration: 3 }, '<');
 
