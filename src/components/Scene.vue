@@ -7,9 +7,31 @@
 
     <!-- Обычный контент после анимации -->
     <section class="content">
-      <div class="block bg-teal-200">Первый блок</div>
+      <div class="cards-section z-0 relative overflow-hidden">
+        <div class="cards relative z-10">
+          <div v-for="n in 10" :key="n" class="card">Карточка {{ n }}</div>
+        </div>
+        <div class="cards__spacer relative" ref="badgeTriggerAnimationRef">
+          <!-- бейдж -->
+          <div class="badge-wrapper z-0">
+            <HorizontalCarousel class="relative z-10" />
+            <div class="string" :style="{ height: stringHeight + 'px' }"></div>
+            <div
+              ref="badgeRef"
+              class="badge"
+              :style="{ transform: `translateY(${badgeOffset}px)` }"
+            >
+              <HorizontalCarousel class="relative z-10" />
+              <img src="../assets/badge.png" alt="badge" />
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="block bg-amber-200">Второй блок</div>
-      <div class="block bg-gray-400">Третий блок</div>
+      <div class="block bg-gray-400 overflow-hidden">
+        <HorizontalCarousel class="relative z-10" />
+      </div>
     </section>
 
     <a href="https://github.com/khusainovrm/severance" target="_blank" class="git-icon">
@@ -19,17 +41,24 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue';
+import { nextTick, onMounted, onUnmounted, ref } from 'vue';
 import * as THREE from 'three';
 import gsap from 'gsap';
 import ScrollTrigger from 'gsap/ScrollTrigger';
 import chair1 from '../assets/char1.png';
 import chair2 from '../assets/char2.png';
+// import Badge from './BadgeScroll.vue';
+import vertexShaderCode from './shaders/vertex.glsl?raw';
+import fragmentShaderCode from './shaders/fragment.glsl?raw';
+import HorizontalCarousel from './HorizontalCarousel.vue';
+
+const START_BADGE_OFFSET = 250;
+const BAGE_MOVE = 175;
 
 gsap.registerPlugin(ScrollTrigger);
 
 // ScrollTrigger.config({ ignoreMobileResize: true }); // fix issue with viewport on resize
-ScrollTrigger.normalizeScroll(true); // mobile address bar will always be present
+ScrollTrigger.normalizeScroll(isMobile()); // mobile address bar will always be present
 
 const canvas = ref<HTMLCanvasElement | null>(null);
 const sceneSection = ref<HTMLElement | null>(null);
@@ -38,6 +67,17 @@ let camera: any;
 let renderer: any;
 let rafId = 0;
 let timeline: any = null;
+let animateCoffee = false;
+let badgeProgress = 0;
+
+const badgeTriggerAnimationRef = ref<HTMLElement | null>(null);
+const badgeRef = ref<HTMLElement | null>(null);
+
+const stringHeight = ref(0);
+const badgeOffset = ref(-START_BADGE_OFFSET);
+
+const targetHeight = ref(0);
+const targetOffset = ref(-START_BADGE_OFFSET);
 
 const onResize = () => {
   if (!canvas.value || !renderer || !camera) {
@@ -54,7 +94,12 @@ const onResize = () => {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 };
 
+function isMobile() {
+  return /Android|iPhone|iPad|iPod|Opera Mini|IEMobile|WPDesktop/i.test(navigator.userAgent);
+}
+
 onMounted(() => {
+  // canvas
   if (!canvas.value) {
     return;
   }
@@ -62,7 +107,7 @@ onMounted(() => {
   const height = window.innerHeight;
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x000000);
+  scene.background = new THREE.Color('#1f1f1f');
 
   camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 100);
   camera.position.set(0, 0, 7);
@@ -154,6 +199,24 @@ onMounted(() => {
   bottomPortal.rotation.x = angleRadians;
   scene.add(bottomPortal);
 
+  // Кофейная жижа
+  const geometryCoffeeLiquid = new THREE.PlaneGeometry(5, 5, 1, 1);
+  const materialCoffeeLiquid = new THREE.ShaderMaterial({
+    uniforms: {
+      u_time: { value: 0 },
+      u_color: { value: new THREE.Color('rgb(0,0,0)') }, // кофейный коричневый
+      u_lightDir: { value: new THREE.Vector3(-0.3, 0.7, 1.0).normalize() }, // свет сверху
+    },
+    vertexShader: vertexShaderCode,
+    fragmentShader: fragmentShaderCode,
+    transparent: true,
+  });
+  const coffeeLiquid = new THREE.Mesh(geometryCoffeeLiquid, materialCoffeeLiquid);
+  coffeeLiquid.position.set(0, 0, 0.01);
+  coffeeLiquid.rotation.z = THREE.MathUtils.degToRad(-180);
+  coffeeLiquid.visible = false;
+  scene.add(coffeeLiquid);
+
   // Scroll-driven timeline
   timeline = gsap.timeline({
     scrollTrigger: {
@@ -205,7 +268,40 @@ onMounted(() => {
   // 6. Лифт уезжает под землю
   timeline.addLabel('step6');
   timeline.to(doorsGroup.position, { y: -5.5, duration: 3 }, '>');
-  timeline.to(line.position, { y: 16, duration: 3 }, '<');
+  timeline.to(
+    line.position,
+    {
+      y: 16,
+      duration: 3,
+      onComplete: () => {
+        animateCoffee = true;
+      },
+    },
+    '<',
+  );
+
+  // Скролл для вытягивания нитки и бейджа
+  gsap.to(badgeTriggerAnimationRef.value, {
+    scrollTrigger: {
+      // markers: true,
+      trigger: badgeTriggerAnimationRef.value,
+      start: 'start center',
+      end: 'center center',
+      scrub: true,
+      onUpdate: (self) => {
+        if (badgeProgress < self.progress) {
+          targetHeight.value = BAGE_MOVE * self.progress;
+          targetOffset.value = -START_BADGE_OFFSET + BAGE_MOVE * self.progress;
+          badgeProgress = self.progress;
+        }
+      },
+    },
+  });
+  // сглаживание (работает на каждом кадре GSAP)
+  gsap.ticker.add(() => {
+    stringHeight.value += (targetHeight.value - stringHeight.value) * 0.15;
+    badgeOffset.value += (targetOffset.value - badgeOffset.value) * 0.15;
+  });
 
   // === Рендер цикл ===
   function animate() {
@@ -216,6 +312,10 @@ onMounted(() => {
 
     char1.visible = char1.position.x >= -5 && char1.position.x <= 5;
     char2.visible = char2.position.x >= -5 && char2.position.x <= 5;
+
+    if (animateCoffee) {
+      materialCoffeeLiquid.uniforms.u_time.value = performance.now() / 1000;
+    }
 
     renderer.render(scene, camera);
   }
@@ -256,7 +356,7 @@ canvas {
   background: #f0f0f0;
 }
 .block {
-  height: 100dvh;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -271,5 +371,54 @@ canvas {
   height: 50px;
   z-index: 2;
   filter: invert(1);
+}
+
+.cards-section {
+  position: relative;
+  //min-height: 200vh;
+  background: #000000;
+  color: white;
+}
+
+.cards {
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 10px 0 10px;
+  background-color: black;
+}
+.cards__spacer {
+  height: 60dvh;
+}
+
+.card {
+  flex: 1;
+  background: #333;
+  padding: 40px;
+  text-align: center;
+  border-radius: 8px;
+}
+
+.badge-wrapper {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+}
+
+.string {
+  width: 2px;
+  background: white;
+}
+
+.badge {
+  width: 160px;
 }
 </style>
