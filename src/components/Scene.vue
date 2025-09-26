@@ -8,8 +8,15 @@
     <!-- Обычный контент после анимации -->
     <section class="content">
       <div class="cards-section z-0 relative overflow-hidden">
-        <div class="cards relative z-10">
-          <div v-for="n in 10" :key="n" class="card">Карточка {{ n }}</div>
+        <div class="cards relative z-10 px-12 pt-12">
+          <span class="text-cyan-900">
+            УПРАВЛЕНИЕ  ИТ-ПРОЕКТАМИ ЭТО КАК ПРОХОДИТЬ ЧЕРЕЗ РАЗДЕЛЕНИЕ Сайт рыбатекст поможет
+            дизайнеру, верстальщику, вебмастеру сгенерировать несколько абзацев более менее
+            осмысленного текста рыбы на русском языке, а начинающему оратору отточить навык
+            публичных выступлений в домашних условиях.  При создании генератора мы использовали
+            небезизвестный универсальный код речей. Текст генерируется абзацами случайным образом
+            от двух до десяти предложений в абзаце.
+          </span>
         </div>
         <div class="cards__spacer relative" ref="badgeTriggerAnimationRef">
           <!-- бейдж -->
@@ -29,11 +36,28 @@
         </div>
       </div>
 
-      <div class="w-full h-[50dvh]">
-        <Cup :cups="[{ title: 'Hello' }, { title: 'World' }, { title: 'Severance' }]" />
+      <!--      Жижа-->
+      <div class="bg-teal-100 w-full h-[300px]">
+        <p>Жижа</p>
+        <p>Капля</p>
       </div>
-      <div class="block bg-gray-400 overflow-hidden">
-        <!--        <HorizontalCarousel class="relative z-10" />-->
+
+      <div class="w-full h-[400px]">
+        <Cup
+          :cups="[
+            {
+              title:
+                'Сайт рыбатекст поможет дизайнеру, верстальщику, вебмастеру сгенерировать несколько абзацев!',
+              subtitle: '',
+            },
+            { title: 'World2', subtitle: 'test' },
+            { title: 'Severance3' },
+          ]"
+        />
+      </div>
+
+      <div class="p-12 w-full grid place-items-center">
+        <span class="text-2xl">Footer</span>
       </div>
     </section>
 
@@ -62,8 +86,8 @@ const BAGE_MOVE = 175;
 
 gsap.registerPlugin(ScrollTrigger);
 
-ScrollTrigger.config({ ignoreMobileResize: true }); // fix issue with viewport on resize
-// ScrollTrigger.normalizeScroll(isMobile()); // mobile address bar will always be present
+// ScrollTrigger.config({ ignoreMobileResize: true }); // fix issue with viewport on resize
+ScrollTrigger.normalizeScroll(isMobile()); // mobile address bar will always be present
 
 const canvas = ref<HTMLCanvasElement | null>(null);
 const sceneSection = ref<HTMLElement | null>(null);
@@ -108,7 +132,7 @@ onMounted(() => {
   const height = window.innerHeight;
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color('#1f1f1f');
+  scene.background = new THREE.Color('#305361');
 
   camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 100);
   camera.position.set(0, 0, 7);
@@ -116,6 +140,33 @@ onMounted(() => {
   renderer = new THREE.WebGLRenderer({ canvas: canvas.value, antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.setSize(width, height, false);
+
+  // Фон градиент
+  const geometryBackground = new THREE.PlaneGeometry(60, 20);
+  const materialBackground = new THREE.ShaderMaterial({
+    uniforms: {
+      color1: { value: new THREE.Color('#305361') },
+      color2: { value: new THREE.Color('#4c6b7c') },
+    },
+    vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+    fragmentShader: `
+    uniform vec3 color1;
+    uniform vec3 color2;
+    varying vec2 vUv;
+    void main() {
+      gl_FragColor = vec4(mix(color1, color2, vUv.y), 1.0);
+    }
+  `,
+  });
+  const background = new THREE.Mesh(geometryBackground, materialBackground);
+  background.position.set(0, 0, -5);
+  scene.add(background);
 
   // === Двери (рамка) ===
   const doorMat = new THREE.MeshBasicMaterial({ color: '#1f1f1f' });
@@ -354,7 +405,6 @@ canvas {
 }
 .content {
   min-height: 200dvh;
-  background: #1f1f1f;
 }
 .block {
   min-height: 100dvh;
@@ -376,21 +426,9 @@ canvas {
 
 .cards-section {
   position: relative;
-  //min-height: 200vh;
-  background: #1f1f1f;
   color: white;
 }
 
-.cards {
-  max-width: 600px;
-  margin-left: auto;
-  margin-right: auto;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  padding: 10px 10px 0 10px;
-  background-color: #1f1f1f;
-}
 .cards__spacer {
   height: 100dvh;
 }

@@ -93,6 +93,7 @@ onMounted(() => {
 .string {
   width: 2px;
   background: white;
+  visibility: hidden;
 }
 
 .badge {

@@ -9,7 +9,6 @@
           :class="{ 'is-active': i === activeIndex }"
           :style="slideStyle(i)"
         >
-          <div class="string z-10"></div>
           <slot name="card " :index="i">
             <img src="../assets/badge.png" alt="badge" class="z-20" />
           </slot>
@@ -22,7 +21,10 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue';
 import gsap from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { isMobile } from './utils.ts';
+
+gsap.registerPlugin(ScrollTrigger);
 
 // Props (optional: allow parent to pass items count)
 const props = defineProps<{ count?: number }>();
@@ -44,6 +46,9 @@ let startX = 0; // pointer start
 let dragX = 0; // delta during drag
 let isDown = false;
 let maxIndex = 0;
+
+// Track if we temporarily disabled GSAP's ScrollTrigger.normalizeScroll during interaction
+let normalizerTemporarilyDisabled = false;
 
 let resizeObserver: ResizeObserver | null = null;
 
@@ -92,7 +97,8 @@ function slideStyle(i: number) {
   const t = offset / slideW; // -1 .. 1 approx near neighbors
   const rot = Math.max(-3, Math.min(3, 3 * Math.sign(t) * Math.min(1, Math.abs(t))));
   return {
-    transform: `rotate(${rot.toFixed(3)}deg) translateY(${(offset * t) / 12}px)`,
+    // transform: `rotate(${rot.toFixed(3)}deg) translateY(${-(offset * t) / 12}px)`,
+    transform: `translateY(${-(offset * t) / 12}px)`,
   };
 }
 
@@ -131,6 +137,17 @@ function onPointerDown(e: PointerEvent) {
   // Prevent native behaviors (like scrolling/text selection) when starting drag
   e.preventDefault();
   e.stopPropagation();
+
+  // On mobile, temporarily disable GSAP's normalizeScroll so our touch-action and preventDefault can stop page scrolling
+  if (isMobile() && !normalizerTemporarilyDisabled) {
+    try {
+      ScrollTrigger.normalizeScroll(false);
+      normalizerTemporarilyDisabled = true;
+    } catch (err) {
+      // ignore
+    }
+  }
+
   isDown = true;
   startX = e.clientX;
   dragX = x.value;
@@ -147,6 +164,29 @@ function onPointerUp() {
   if (!isDown) return;
   isDown = false;
   snapToNearest();
+
+  // Re-enable normalizeScroll after interaction
+  if (normalizerTemporarilyDisabled) {
+    try {
+      ScrollTrigger.normalizeScroll(true);
+    } catch (err) {
+      // ignore
+    }
+    normalizerTemporarilyDisabled = false;
+  }
+}
+function onPointerCancel() {
+  if (!isDown) return;
+  isDown = false;
+  snapToNearest();
+  if (normalizerTemporarilyDisabled) {
+    try {
+      ScrollTrigger.normalizeScroll(true);
+    } catch (err) {
+      // ignore
+    }
+    normalizerTemporarilyDisabled = false;
+  }
 }
 
 function onWheel(e: WheelEvent) {
@@ -179,6 +219,7 @@ onMounted(() => {
   viewport.value?.addEventListener('pointerdown', onPointerDown);
   window.addEventListener('pointermove', onPointerMove);
   window.addEventListener('pointerup', onPointerUp);
+  window.addEventListener('pointercancel', onPointerCancel);
   viewport.value?.addEventListener('wheel', onWheel, { passive: false });
 });
 
@@ -187,7 +228,18 @@ onUnmounted(() => {
   viewport.value?.removeEventListener('pointerdown', onPointerDown);
   window.removeEventListener('pointermove', onPointerMove);
   window.removeEventListener('pointerup', onPointerUp);
+  window.removeEventListener('pointercancel', onPointerCancel);
   viewport.value?.removeEventListener('wheel', onWheel as any);
+
+  // Safety: ensure normalizer gets re-enabled if component unmounts during interaction
+  if (normalizerTemporarilyDisabled) {
+    try {
+      ScrollTrigger.normalizeScroll(true);
+    } catch (err) {
+      // ignore
+    }
+    normalizerTemporarilyDisabled = false;
+  }
 });
 
 // react on activeIndex change to animate tilts smoothly
@@ -213,7 +265,6 @@ onUnmounted(() => {
   width: 100%;
   touch-action: none;
   overscroll-behavior: contain;
-  padding: 20px 0;
 }
 .h-carousel__track {
   display: flex;
@@ -244,14 +295,6 @@ onUnmounted(() => {
 }
 .h-carousel__slide.is-active {
   //box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
-}
-
-.string {
-  width: 2px;
-  background: white;
-  height: 450px;
-  position: absolute;
-  top: -450px;
 }
 
 img {

@@ -5,9 +5,12 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, reactive } from 'vue';
 import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import { Pane } from 'tweakpane';
-import { string } from 'three/src/Three.TSL';
+import gsap from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { isMobile } from './utils.ts';
+
+gsap.registerPlugin(ScrollTrigger);
 
 interface CupProps {
   title: string;
@@ -35,8 +38,8 @@ let dirLight: THREE.DirectionalLight | null = null;
 
 const sceneSettings = reactive({
   camera: {
-    fov: 85,
-    position: { x: 0, y: 4, z: 7 },
+    fov: 35,
+    position: { x: 0, y: 6.5, z: 11 },
     target: { x: 0, y: 2, z: 0 },
   },
   light: {
@@ -53,7 +56,7 @@ const cupSizes = reactive({
   wallThickness: 0.2,
   radialSegments: 64,
   // distance between cups along X
-  spacingX: 6,
+  spacingX: 7,
   // horizontal offset of the text texture around the cup (UV.x)
   textureOffsetX: 0.52,
   // how far the liquid surface is below the top edge
@@ -62,8 +65,8 @@ const cupSizes = reactive({
   text: {
     title: {
       content: 'Спасибо за такое атмосферное мероприятие!',
-      fontSize: 64,
-      lineHeight: 72,
+      fontSize: 54,
+      lineHeight: 60,
       color: '#0e586b',
     },
     subtitle: {
@@ -73,7 +76,7 @@ const cupSizes = reactive({
       color: '#0e586b',
     },
     background: '#f2e7db',
-    padding: 24,
+    padding: 140,
     pxPerUnit: 128, // pixels per world unit (affects canvas resolution)
   },
   // handle parameters
@@ -120,7 +123,7 @@ onMounted(() => {
 
   const scene = new THREE.Scene();
   const axesHelper = new THREE.AxesHelper(5);
-  scene.add(axesHelper);
+  // scene.add(axesHelper);
   scene.background = null;
 
   camera = new THREE.PerspectiveCamera(sceneSettings.camera.fov, width / height, 0.1, 100);
@@ -171,12 +174,27 @@ onMounted(() => {
   );
   scene.add(dirLight);
 
+  // Стол
+  const table = new THREE.Mesh(
+    new THREE.PlaneGeometry(80, 12),
+    new THREE.MeshBasicMaterial({ color: '#5fbaaa' }),
+  );
+  table.position.set(0, 0, 0);
+  // const angleDegrees = -90;
+  // const angleRadians = THREE.MathUtils.degToRad(angleDegrees);
+  // Поворот вокруг оси X
+  table.rotation.x = -Math.PI / 2;
+  scene.add(table);
+
   // === КРУЖКА ===
   const cupGourp = new THREE.Group();
 
   // === создаём canvas и функции отрисовки текста ===
   const canvasText = document.createElement('canvas');
   const ctx = canvasText.getContext('2d')!;
+
+  // Хранилище всех текстур для обновления смещения
+  const allTextTextures: THREE.CanvasTexture[] = [];
 
   // Вспомогательная: расчет размеров канваса от размеров кружки
   const computeCanvasSize = () => {
@@ -290,13 +308,99 @@ onMounted(() => {
     }
   };
 
+  // Создать отдельную текстуру для указанного содержимого (для других кружек)
+  function createCanvasTextureWithContent(opts: {
+    title?: string;
+    subtitle?: string;
+    titleColor?: string;
+    subtitleColor?: string;
+  }): THREE.CanvasTexture {
+    const { width, height } = computeCanvasSize();
+    const canvas2 = document.createElement('canvas');
+    const ctx2 = canvas2.getContext('2d')!;
+
+    canvas2.width = width;
+    canvas2.height = height;
+
+    // Background
+    ctx2.fillStyle = cupSizes.text.background;
+    ctx2.fillRect(0, 0, width, height);
+
+    // Layout
+    const areaWidth = Math.max(10, Math.floor(width * 0.5));
+    const pad = Math.max(0, Math.floor(cupSizes.text.padding));
+    const contentWidth = Math.max(10, areaWidth - pad * 2);
+    const areaX = Math.floor((width - areaWidth) / 2) + pad;
+
+    // Fonts
+    const titleFontSize = Math.max(6, Math.floor(cupSizes.text.title.fontSize));
+    const titleLineHeight = Math.max(titleFontSize + 2, Math.floor(cupSizes.text.title.lineHeight));
+    const titleFont = `700 ${titleFontSize}px 'Inter Tight'`;
+
+    const subtitleFontSize = Math.max(6, Math.floor(cupSizes.text.subtitle.fontSize));
+    const subtitleLineHeight = Math.max(
+      subtitleFontSize + 2,
+      Math.floor(cupSizes.text.subtitle.lineHeight),
+    );
+    const subtitleFont = `600 ${subtitleFontSize}px 'Inter Tight'`;
+
+    const titleText = opts.title ?? '';
+    const subtitleText = opts.subtitle ?? '';
+
+    const titleLines = (function () {
+      ctx2.font = titleFont;
+      return wrapLines(titleText, contentWidth, titleFont, titleLineHeight);
+    })();
+    const subtitleLines = (function () {
+      ctx2.font = subtitleFont;
+      return wrapLines(subtitleText, contentWidth, subtitleFont, subtitleLineHeight);
+    })();
+
+    const totalTextHeight =
+      titleLines.length * titleLineHeight + subtitleLines.length * subtitleLineHeight;
+    let y = Math.floor((height - totalTextHeight) / 2);
+
+    ctx2.textAlign = 'center';
+    ctx2.textBaseline = 'top';
+
+    // Draw title
+    ctx2.font = titleFont;
+    ctx2.fillStyle = opts.titleColor || cupSizes.text.title.color;
+    for (const line of titleLines) {
+      ctx2.fillText(line, areaX + contentWidth / 2, y);
+      y += titleLineHeight;
+    }
+
+    // Draw subtitle
+    ctx2.font = subtitleFont;
+    ctx2.fillStyle = opts.subtitleColor || cupSizes.text.subtitle.color;
+    for (const line of subtitleLines) {
+      ctx2.fillText(line, areaX + contentWidth / 2, y);
+      y += subtitleLineHeight;
+    }
+
+    const tex = new THREE.CanvasTexture(canvas2);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.offset.x = cupSizes.textureOffsetX;
+    tex.needsUpdate = true;
+    tex.generateMipmaps = false;
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    return tex;
+  }
+
   // === текстура ===
   let textTexture: THREE.CanvasTexture = new THREE.CanvasTexture(canvasText);
   textTexture.needsUpdate = true;
   textTexture.wrapS = THREE.RepeatWrapping;
   textTexture.wrapT = THREE.RepeatWrapping;
+  textTexture.generateMipmaps = false;
+  textTexture.minFilter = THREE.LinearFilter;
+  textTexture.magFilter = THREE.LinearFilter;
   // Смещение текста по окружности
   textTexture.offset.x = cupSizes.textureOffsetX;
+  allTextTextures.push(textTexture);
 
   // Предварительное объявление материала кружки, чтобы избежать TDZ в recreateTextTexture
   let cupMaterial: THREE.MeshToonMaterial | null = null;
@@ -316,6 +420,12 @@ onMounted(() => {
     if (cupMaterial) {
       cupMaterial.map = newTex;
       cupMaterial.needsUpdate = true;
+    }
+    // обновим ссылку первой текстуры
+    if (allTextTextures.length > 0) {
+      allTextTextures[0] = newTex;
+    } else {
+      allTextTextures.push(newTex);
     }
     old.dispose?.();
   }
@@ -417,6 +527,26 @@ onMounted(() => {
     }
   }
 
+  // Для клонов назначаем индивидуальные текстуры с их контентом
+  if (Array.isArray(props.cups)) {
+    for (let i = 1; i < Math.min(props.cups.length, cupGroups.length); i++) {
+      const g = cupGroups[i];
+      const cupMesh = g.getObjectByName('cup') as THREE.Mesh | null;
+      if (cupMesh) {
+        const cupData = props.cups[i] || ({} as any);
+        const tex = createCanvasTextureWithContent({
+          title: cupData.title,
+          subtitle: cupData.subtitle,
+          titleColor: cupData.titleColor,
+          subtitleColor: cupData.subtitleColor,
+        });
+        allTextTextures.push(tex);
+        const mat = new THREE.MeshToonMaterial({ map: tex });
+        cupMesh.material = mat;
+      }
+    }
+  }
+
   const repositionGroups = () => {
     for (let i = 0; i < cupGroups.length; i++) {
       cupGroups[i].position.set(i * cupSizes.spacingX, cupSizes.height / 2, 0);
@@ -506,13 +636,222 @@ onMounted(() => {
     repositionGroups();
   };
 
+  // === Управление: горизонтальная карусель со снапом + вращение выбранной кружки ===
+  let activeIndex = 0;
+  const maxIndex = Math.max(0, (Array.isArray(props.cups) ? props.cups.length : 1) - 1);
+  let currX = 0; // camera/target X
+  let isDown = false;
+  let mode: 'idle' | 'carousel' | 'rotate' = 'idle';
+  let selectedGroup: THREE.Group | null = null;
+  let startClientX = 0;
+  let dragStartX = 0;
+  let startRotY = 0;
+  let snapTween: gsap.core.Tween | null = null;
+  // Track if we temporarily disabled GSAP's ScrollTrigger.normalizeScroll during interaction
+  let normalizerTemporarilyDisabled = false;
+
+  function setCameraX(x: number) {
+    currX = Math.max(0, Math.min(x, centerXForIndex(maxIndex)));
+    camera.position.x = currX;
+    sceneSettings.camera.position.x = currX;
+    sceneSettings.camera.target.x = currX;
+    // keep looking at Y/Z target position
+    camera.lookAt(
+      new THREE.Vector3(
+        sceneSettings.camera.target.x,
+        sceneSettings.camera.target.y,
+        sceneSettings.camera.target.z,
+      ),
+    );
+  }
+
+  function clampIndex(i: number) {
+    return Math.max(0, Math.min(i, maxIndex));
+  }
+  function centerXForIndex(i: number) {
+    return clampIndex(i) * cupSizes.spacingX;
+  }
+  function nearestIndexByX(xVal: number) {
+    return clampIndex(Math.round(xVal / Math.max(0.0001, cupSizes.spacingX)));
+  }
+  function updateActiveByX(xVal: number) {
+    const idx = nearestIndexByX(xVal);
+    if (idx !== activeIndex) activeIndex = idx;
+  }
+  function stopSnap() {
+    if (snapTween) {
+      snapTween.kill();
+      snapTween = null;
+    }
+  }
+  function snapToNearest(duration = 0.35) {
+    const targetIdx = nearestIndexByX(currX);
+    const toX = centerXForIndex(targetIdx);
+    stopSnap();
+    const proxy = { v: currX };
+    snapTween = gsap.to(proxy, {
+      v: toX,
+      duration,
+      ease: 'power3.out',
+      onUpdate: () => {
+        setCameraX(proxy.v);
+        updateActiveByX(proxy.v);
+      },
+      onComplete: () => {
+        activeIndex = targetIdx;
+        snapTween = null;
+      },
+    });
+  }
+  function goToIndex(idx: number, duration = 0.45) {
+    idx = clampIndex(idx);
+    const toX = centerXForIndex(idx);
+    stopSnap();
+    const proxy = { v: currX };
+    snapTween = gsap.to(proxy, {
+      v: toX,
+      duration,
+      ease: 'power3.out',
+      onUpdate: () => setCameraX(proxy.v),
+      onComplete: () => {
+        activeIndex = idx;
+        snapTween = null;
+      },
+    });
+  }
+
+  const raycaster = new THREE.Raycaster();
+  const ndc = new THREE.Vector2();
+  const cupMeshSet = new Set<THREE.Object3D>();
+  // collect cup meshes (outer shell) for hit test
+  for (const g of cupGroups) {
+    const m = g.getObjectByName('cup');
+    if (m) cupMeshSet.add(m);
+  }
+  function setNdcFromEvent(ev: PointerEvent) {
+    const rect = renderer.domElement.getBoundingClientRect();
+    ndc.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
+    ndc.y = -(((ev.clientY - rect.top) / rect.height) * 2 - 1);
+  }
+  function pickGroup(ev: PointerEvent): THREE.Group | null {
+    setNdcFromEvent(ev);
+    raycaster.setFromCamera(ndc, camera);
+    const intersects = raycaster.intersectObjects(Array.from(cupMeshSet), true);
+    if (!intersects.length) return null;
+    let obj: THREE.Object3D | null = intersects[0].object;
+    while (obj && !(obj instanceof THREE.Group)) {
+      obj = obj.parent;
+    }
+    // ensure it's one of known groups
+    if (obj && cupGroups.includes(obj as THREE.Group)) return obj as THREE.Group;
+    return intersects[0].object.parent as THREE.Group | null;
+  }
+
+  function onPointerDown(ev: PointerEvent) {
+    ev.preventDefault();
+    ev.stopPropagation();
+
+    // On mobile, temporarily disable GSAP's normalizeScroll so our touch-action and preventDefault can stop page scrolling
+    if (isMobile() && !normalizerTemporarilyDisabled) {
+      try {
+        ScrollTrigger.normalizeScroll(false);
+        normalizerTemporarilyDisabled = true;
+      } catch (err) {
+        // ignore
+      }
+    }
+
+    isDown = true;
+    startClientX = ev.clientX;
+    dragStartX = currX;
+    stopSnap();
+    const g = pickGroup(ev);
+    if (g) {
+      mode = 'rotate';
+      selectedGroup = g;
+      startRotY = g.rotation.y;
+    } else {
+      mode = 'carousel';
+      selectedGroup = null;
+    }
+    (ev.target as Element).setPointerCapture?.(ev.pointerId);
+  }
+  function onPointerMove(ev: PointerEvent) {
+    if (!isDown) return;
+    const dx = ev.clientX - startClientX;
+    if (mode === 'carousel') {
+      const sensitivity = Math.max(0.002, cupSizes.spacingX / 300); // world units per pixel
+      const nextX = dragStartX - dx * sensitivity;
+      setCameraX(nextX);
+      updateActiveByX(nextX);
+    } else if (mode === 'rotate' && selectedGroup) {
+      const rotSensitivity = 0.01; // radians per pixel
+      selectedGroup.rotation.y = startRotY - dx * rotSensitivity;
+    }
+  }
+  function onPointerUp() {
+    if (!isDown) return;
+    isDown = false;
+    if (mode === 'carousel') {
+      snapToNearest();
+    }
+    mode = 'idle';
+    selectedGroup = null;
+
+    // Re-enable normalizeScroll after interaction
+    if (normalizerTemporarilyDisabled) {
+      try {
+        ScrollTrigger.normalizeScroll(true);
+      } catch (err) {
+        // ignore
+      }
+      normalizerTemporarilyDisabled = false;
+    }
+  }
+  function onPointerCancel() {
+    if (!isDown) return;
+    isDown = false;
+    if (mode === 'carousel') {
+      snapToNearest();
+    }
+    mode = 'idle';
+    selectedGroup = null;
+    if (normalizerTemporarilyDisabled) {
+      try {
+        ScrollTrigger.normalizeScroll(true);
+      } catch (err) {
+        // ignore
+      }
+      normalizerTemporarilyDisabled = false;
+    }
+  }
+  function onWheel(e: WheelEvent) {
+    // Disable zoom/scroll; use wheel to step horizontally
+    // e.preventDefault();
+    // e.stopPropagation();
+    // const delta = e.deltaY || e.deltaX || 0;
+    // if (Math.abs(delta) < 2) return;
+    // const step = delta > 0 ? 1 : -1;
+    // goToIndex(activeIndex + step);
+  }
+
+  // init camera at first cup
+  setCameraX(centerXForIndex(0));
+
+  // listeners on canvas
+  renderer.domElement.addEventListener('pointerdown', onPointerDown);
+  window.addEventListener('pointermove', onPointerMove);
+  window.addEventListener('pointerup', onPointerUp);
+  window.addEventListener('pointercancel', onPointerCancel);
+  renderer.domElement.addEventListener('wheel', onWheel, { passive: false });
+
   // === Tweakpane ===
   pane = new Pane({ title: 'Cup Settings', expanded: false });
-  const gMain = pane.addFolder({ title: 'Main' });
-  const gHandle = pane.addFolder({ title: 'Handle' });
-  const gText = pane.addFolder({ title: 'Text' });
-  const gCamera = pane.addFolder({ title: 'Camera' });
-  const gLight = pane.addFolder({ title: 'Light' });
+  const gMain = pane.addFolder({ title: 'Main', expanded: false });
+  const gHandle = pane.addFolder({ title: 'Handle', expanded: false });
+  const gText = pane.addFolder({ title: 'Text', expanded: false });
+  const gCamera = pane.addFolder({ title: 'Camera', expanded: false });
+  const gLight = pane.addFolder({ title: 'Light', expanded: false });
 
   // Camera bindings
   const bFov = gCamera.addBinding(sceneSettings.camera, 'fov', { min: 10, max: 120, step: 1 });
@@ -558,45 +897,45 @@ onMounted(() => {
     );
   });
   // Camera target (look at) bindings
-  const bTarX = gCamera.addBinding(sceneSettings.camera.target, 'x', {
-    min: -20,
-    max: 20,
-    step: 0.1,
-  });
-  bTarX.on('change', () => {
-    controls?.target.set(
-      sceneSettings.camera.target.x,
-      sceneSettings.camera.target.y,
-      sceneSettings.camera.target.z,
-    );
-    controls?.update();
-  });
-  const bTarY = gCamera.addBinding(sceneSettings.camera.target, 'y', {
-    min: -20,
-    max: 20,
-    step: 0.1,
-  });
-  bTarY.on('change', () => {
-    controls?.target.set(
-      sceneSettings.camera.target.x,
-      sceneSettings.camera.target.y,
-      sceneSettings.camera.target.z,
-    );
-    controls?.update();
-  });
-  const bTarZ = gCamera.addBinding(sceneSettings.camera.target, 'z', {
-    min: -20,
-    max: 20,
-    step: 0.1,
-  });
-  bTarZ.on('change', () => {
-    controls?.target.set(
-      sceneSettings.camera.target.x,
-      sceneSettings.camera.target.y,
-      sceneSettings.camera.target.z,
-    );
-    controls?.update();
-  });
+  // const bTarX = gCamera.addBinding(sceneSettings.camera.target, 'x', {
+  //   min: -20,
+  //   max: 20,
+  //   step: 0.1,
+  // });
+  // bTarX.on('change', () => {
+  //   controls?.target.set(
+  //     sceneSettings.camera.target.x,
+  //     sceneSettings.camera.target.y,
+  //     sceneSettings.camera.target.z,
+  //   );
+  //   controls?.update();
+  // });
+  // const bTarY = gCamera.addBinding(sceneSettings.camera.target, 'y', {
+  //   min: -20,
+  //   max: 20,
+  //   step: 0.1,
+  // });
+  // bTarY.on('change', () => {
+  //   controls?.target.set(
+  //     sceneSettings.camera.target.x,
+  //     sceneSettings.camera.target.y,
+  //     sceneSettings.camera.target.z,
+  //   );
+  //   controls?.update();
+  // });
+  // const bTarZ = gCamera.addBinding(sceneSettings.camera.target, 'z', {
+  //   min: -20,
+  //   max: 20,
+  //   step: 0.1,
+  // });
+  // bTarZ.on('change', () => {
+  //   controls?.target.set(
+  //     sceneSettings.camera.target.x,
+  //     sceneSettings.camera.target.y,
+  //     sceneSettings.camera.target.z,
+  //   );
+  //   controls?.update();
+  // });
 
   // Light bindings
   const bLightColor = gLight.addBinding(sceneSettings.light, 'color');
@@ -651,8 +990,10 @@ onMounted(() => {
   // Binding to shift text texture horizontally around the cup
   const bTex = gMain.addBinding(cupSizes, 'textureOffsetX', { min: -1, max: 1, step: 0.01 });
   bTex.on('change', () => {
-    textTexture.offset.x = cupSizes.textureOffsetX;
-    textTexture.needsUpdate = true;
+    for (const tex of allTextTextures) {
+      tex.offset.x = cupSizes.textureOffsetX;
+      tex.needsUpdate = true;
+    }
   });
 
   // Text bindings
@@ -711,6 +1052,8 @@ onMounted(() => {
   const bSpacing = gMain.addBinding(cupSizes, 'spacingX', { min: 0.1, max: 20, step: 0.1 });
   bSpacing.on('change', () => {
     repositionGroups();
+    // recenter camera to current active index when spacing changes
+    setCameraX(centerXForIndex(activeIndex));
   });
   bindings.forEach((b) =>
     b.on('change', () => {
@@ -814,10 +1157,33 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('resize', onResize);
+  // remove interaction listeners
+  if (renderer?.domElement) {
+    renderer.domElement.removeEventListener('pointerdown', onPointerDown as any);
+    renderer.domElement.removeEventListener('wheel', onWheel as any);
+  }
+  window.removeEventListener('pointermove', onPointerMove as any);
+  window.removeEventListener('pointerup', onPointerUp as any);
+  window.removeEventListener('pointercancel', onPointerCancel as any);
   if (pane) {
     pane.dispose();
     pane = null;
   }
+  // stop any running tween
+  try {
+    (snapTween as any)?.kill?.();
+  } catch {}
+
+  // Safety: ensure normalizer gets re-enabled if component unmounts during interaction
+  if (normalizerTemporarilyDisabled) {
+    try {
+      ScrollTrigger.normalizeScroll(true);
+    } catch (err) {
+      // ignore
+    }
+    normalizerTemporarilyDisabled = false;
+  }
+
   // Dispose renderer to free WebGL context
   if (renderer) {
     renderer.dispose?.();
@@ -831,5 +1197,9 @@ canvas {
   height: 100%;
   display: block;
   background: transparent; /* allow CSS page background to show through */
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: none;
 }
 </style>
