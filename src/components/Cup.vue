@@ -17,6 +17,8 @@ interface CupProps {
   titleColor?: string;
   subtitle?: string;
   subtitleColor?: string;
+  backText?: string;
+  backTextColor?: string;
 }
 
 const props = withDefaults(defineProps<{ cups: CupProps[] }>(), {
@@ -24,6 +26,8 @@ const props = withDefaults(defineProps<{ cups: CupProps[] }>(), {
     {
       title: 'Спасибо за такое атмосферное мероприятие!',
       subtitle: 'Отличная организация, тематические локации и перформанс!',
+      backText: '',
+      backTextColor: '#0e586b',
     },
   ],
 });
@@ -79,6 +83,16 @@ const cupSizes = reactive({
     padding: 140,
     pxPerUnit: 128, // pixels per world unit (affects canvas resolution)
   },
+  // back text parameters (rendered on the opposite side, no subtitle)
+  backtext: {
+    title: {
+      content: '',
+      fontSize: 54,
+      lineHeight: 60,
+      color: '#0e586b',
+    },
+    padding: 140,
+  },
   // handle parameters
   handle: {
     ringRadius: 1.2,
@@ -94,6 +108,10 @@ if (Array.isArray(props.cups) && props.cups.length > 0) {
   if (first.titleColor) cupSizes.text.title.color = first.titleColor;
   if (first.subtitle !== undefined) cupSizes.text.subtitle.content = first.subtitle || '';
   if (first.subtitleColor) cupSizes.text.subtitle.color = first.subtitleColor;
+  // Initialize back text from props as well
+  if (first.backText !== undefined) cupSizes.backtext.title.content = first.backText || '';
+  if ((first as any).backTextColor)
+    cupSizes.backtext.title.color = (first as any).backTextColor as string;
 }
 
 const getInnerRadius = () => cupSizes.outerRadius - cupSizes.wallThickness;
@@ -302,6 +320,34 @@ onMounted(() => {
       y += subtitleLineHeight;
     }
 
+    // Back text (title only), centered on the opposite side (UV shift by 0.5)
+    const backTitleFontSize = Math.max(6, Math.floor(cupSizes.backtext.title.fontSize));
+    const backTitleLineHeight = Math.max(
+      backTitleFontSize + 2,
+      Math.floor(cupSizes.backtext.title.lineHeight),
+    );
+    const backTitleFont = `700 ${backTitleFontSize}px 'Inter Tight'`;
+
+    const backTitleLines = wrapLines(
+      cupSizes.backtext.title.content || '',
+      contentWidth,
+      backTitleFont,
+      backTitleLineHeight,
+    );
+    const backTotalHeight = backTitleLines.length * backTitleLineHeight;
+    let yBack = Math.floor((height - backTotalHeight) / 2);
+
+    ctx.font = backTitleFont;
+    ctx.fillStyle = cupSizes.backtext.title.color;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    // draw twice for wrap-around: at x=0 and x=width
+    for (const line of backTitleLines) {
+      ctx.fillText(line, 0, yBack);
+      ctx.fillText(line, width, yBack);
+      yBack += backTitleLineHeight;
+    }
+
     textTexture.needsUpdate = true;
     if (sizeChanged) {
       recreateTextTexture();
@@ -314,6 +360,8 @@ onMounted(() => {
     subtitle?: string;
     titleColor?: string;
     subtitleColor?: string;
+    backText?: string;
+    backTextColor?: string;
   }): THREE.CanvasTexture {
     const { width, height } = computeCanvasSize();
     const canvas2 = document.createElement('canvas');
@@ -377,6 +425,37 @@ onMounted(() => {
     for (const line of subtitleLines) {
       ctx2.fillText(line, areaX + contentWidth / 2, y);
       y += subtitleLineHeight;
+    }
+
+    // Back text (title only) on the opposite side
+    const backTitleFontSize = Math.max(6, Math.floor(cupSizes.backtext.title.fontSize));
+    const backTitleLineHeight = Math.max(
+      backTitleFontSize + 2,
+      Math.floor(cupSizes.backtext.title.lineHeight),
+    );
+    const backTitleFont = `700 ${backTitleFontSize}px 'Inter Tight'`;
+
+    const backTitleLines = (function () {
+      ctx2.font = backTitleFont;
+      return wrapLines(
+        (opts.backText ?? cupSizes.backtext.title.content) || '',
+        contentWidth,
+        backTitleFont,
+        backTitleLineHeight,
+      );
+    })();
+
+    const backTotalHeight = backTitleLines.length * backTitleLineHeight;
+    let yBack = Math.floor((canvas2.height - backTotalHeight) / 2);
+
+    ctx2.font = backTitleFont;
+    ctx2.fillStyle = opts.backTextColor || cupSizes.backtext.title.color;
+    ctx2.textAlign = 'center';
+    ctx2.textBaseline = 'top';
+    for (const line of backTitleLines) {
+      ctx2.fillText(line, 0, yBack);
+      ctx2.fillText(line, canvas2.width, yBack);
+      yBack += backTitleLineHeight;
     }
 
     const tex = new THREE.CanvasTexture(canvas2);
@@ -539,6 +618,8 @@ onMounted(() => {
           subtitle: cupData.subtitle,
           titleColor: cupData.titleColor,
           subtitleColor: cupData.subtitleColor,
+          backText: cupData.backText,
+          backTextColor: cupData.backTextColor,
         });
         allTextTextures.push(tex);
         const mat = new THREE.MeshToonMaterial({ map: tex });
@@ -999,6 +1080,7 @@ onMounted(() => {
   // Text bindings
   const gTitle = gText.addFolder({ title: 'Title' });
   const gSubtitle = gText.addFolder({ title: 'Subtitle' });
+  const gBackText = gText.addFolder({ title: 'Back Text' });
 
   const bTContent = gTitle.addBinding(cupSizes.text.title, 'content', {
     view: 'text',
@@ -1031,6 +1113,27 @@ onMounted(() => {
   bSLH.on('change', updateCanvasTexture);
   const bSColor = gSubtitle.addBinding(cupSizes.text.subtitle, 'color');
   bSColor.on('change', updateCanvasTexture);
+
+  // Back Text bindings (title only)
+  const bBTContent = gBackText.addBinding(cupSizes.backtext.title, 'content', {
+    view: 'text',
+    lineCount: 5,
+  });
+  bBTContent.on('change', updateCanvasTexture);
+  const bBTFont = gBackText.addBinding(cupSizes.backtext.title, 'fontSize', {
+    min: 8,
+    max: 200,
+    step: 1,
+  });
+  bBTFont.on('change', updateCanvasTexture);
+  const bBTLH = gBackText.addBinding(cupSizes.backtext.title, 'lineHeight', {
+    min: 8,
+    max: 300,
+    step: 1,
+  });
+  bBTLH.on('change', updateCanvasTexture);
+  const bBTColor = gBackText.addBinding(cupSizes.backtext.title, 'color');
+  bBTColor.on('change', updateCanvasTexture);
 
   const bBg = gText.addBinding(cupSizes.text, 'background');
   bBg.on('change', updateCanvasTexture);
@@ -1092,6 +1195,15 @@ onMounted(() => {
             background: cupSizes.text.background,
             padding: cupSizes.text.padding,
             pxPerUnit: cupSizes.text.pxPerUnit,
+          },
+          backtext: {
+            title: {
+              content: cupSizes.backtext.title.content,
+              fontSize: cupSizes.backtext.title.fontSize,
+              lineHeight: cupSizes.backtext.title.lineHeight,
+              color: cupSizes.backtext.title.color,
+            },
+            padding: cupSizes.backtext.padding,
           },
           handle: {
             ringRadius: cupSizes.handle.ringRadius,

@@ -49,9 +49,10 @@
               title:
                 'Сайт рыбатекст поможет дизайнеру, верстальщику, вебмастеру сгенерировать несколько абзацев!',
               subtitle: '',
+              backText: 'Справа больше кружек!',
             },
-            { title: 'World2', subtitle: 'test' },
-            { title: 'Severance3' },
+            { title: 'World2', subtitle: 'test', backText: '' },
+            { title: 'Severance3', backText: '' },
           ]"
         />
       </div>
