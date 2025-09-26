@@ -42,6 +42,7 @@ let dirLight: THREE.DirectionalLight | null = null;
 
 const sceneSettings = reactive({
   camera: {
+    useOrtho: false,
     fov: 35,
     position: { x: 0, y: 6.5, z: 11 },
     target: { x: 0, y: 2, z: 0 },
@@ -121,16 +122,59 @@ const onResize = () => {
     return;
   }
   const { width, height } = canvas.value.parentElement.getBoundingClientRect();
-  // const width = window.innerWidth;
-  // const height = window.innerHeight;
 
-  // Update camera
-  camera.aspect = width / height || 1;
+  if ((camera as any).isPerspectiveCamera) {
+    (camera as THREE.PerspectiveCamera).aspect = (width / Math.max(1, height)) || 1;
+  } else if ((camera as any).isOrthographicCamera) {
+    const left = width / -80;
+    const right = width / 80;
+    const top = height / 80;
+    const bottom = height / -80;
+    const ortho = camera as THREE.OrthographicCamera;
+    ortho.left = left;
+    ortho.right = right;
+    ortho.top = top;
+    ortho.bottom = bottom;
+  }
   camera.updateProjectionMatrix();
 
   renderer.setSize(width, height, false);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 };
+
+function switchCamera() {
+  if (!canvas.value?.parentElement) return;
+  const { width, height } = canvas.value.parentElement.getBoundingClientRect();
+  const aspect = width / Math.max(1, height);
+
+  let newCam: THREE.Camera;
+  if (sceneSettings.camera.useOrtho) {
+    newCam = new THREE.OrthographicCamera(
+      width / -80,
+      width / 80,
+      height / 80,
+      height / -80,
+      1,
+      1000
+    );
+  } else {
+    newCam = new THREE.PerspectiveCamera(sceneSettings.camera.fov, aspect, 0.1, 100);
+  }
+
+  newCam.position.set(
+    sceneSettings.camera.position.x,
+    sceneSettings.camera.position.y,
+    sceneSettings.camera.position.z
+  );
+  newCam.lookAt(
+    new THREE.Vector3(
+      sceneSettings.camera.target.x,
+      sceneSettings.camera.target.y,
+      sceneSettings.camera.target.z
+    )
+  );
+  camera = newCam as any;
+}
 
 onMounted(() => {
   if (!canvas.value?.parentElement) {
@@ -144,20 +188,7 @@ onMounted(() => {
   // scene.add(axesHelper);
   scene.background = null;
 
-  camera = new THREE.PerspectiveCamera(sceneSettings.camera.fov, width / height, 0.1, 100);
-  // camera = new THREE.OrthographicCamera(
-  //   width / -80,
-  //   width / 80,
-  //   height / 80,
-  //   height / -80,
-  //   1,
-  //   1000,
-  // );
-  camera.position.set(
-    sceneSettings.camera.position.x,
-    sceneSettings.camera.position.y,
-    sceneSettings.camera.position.z,
-  );
+  switchCamera();
 
   renderer = new THREE.WebGLRenderer({ canvas: canvas.value, antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -934,12 +965,21 @@ onMounted(() => {
   const gCamera = pane.addFolder({ title: 'Camera', expanded: false });
   const gLight = pane.addFolder({ title: 'Light', expanded: false });
 
+  // Camera type toggle
+  const bCamType = gCamera.addBinding(sceneSettings.camera, 'useOrtho', { label: 'Orthographic' });
+  bCamType.on('change', () => {
+    switchCamera();
+    onResize();
+  });
+
   // Camera bindings
   const bFov = gCamera.addBinding(sceneSettings.camera, 'fov', { min: 10, max: 120, step: 1 });
   bFov.on('change', () => {
     if (!camera) return;
-    camera.fov = sceneSettings.camera.fov;
-    camera.updateProjectionMatrix();
+    if ((camera as any).isPerspectiveCamera) {
+      (camera as THREE.PerspectiveCamera).fov = sceneSettings.camera.fov;
+      camera.updateProjectionMatrix();
+    }
   });
   const bCamX = gCamera.addBinding(sceneSettings.camera.position, 'x', {
     min: -20,
