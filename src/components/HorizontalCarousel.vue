@@ -9,7 +9,10 @@
           :class="{ 'is-active': i === activeIndex }"
           :style="slideStyle(i)"
         >
-          <slot name="card" :index="i">Карточка {{ i + 1 }}</slot>
+          <div class="string z-10"></div>
+          <slot name="card " :index="i">
+            <img src="../assets/badge.png" alt="badge" class="z-20" />
+          </slot>
         </li>
       </ul>
     </div>
@@ -17,8 +20,9 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from 'vue';
+import { onMounted, onUnmounted, ref } from 'vue';
 import gsap from 'gsap';
+import { isMobile } from './utils.ts';
 
 // Props (optional: allow parent to pass items count)
 const props = defineProps<{ count?: number }>();
@@ -77,6 +81,9 @@ function nearestIndexByX(currX: number) {
 }
 
 function slideStyle(i: number) {
+  if (!isMobile()) {
+    return;
+  }
   const vpw = viewport.value?.getBoundingClientRect().width || 1;
   // screen position of slide center
   const slideCenter = x.value + i * slideW + slideW / 2;
@@ -85,7 +92,7 @@ function slideStyle(i: number) {
   const t = offset / slideW; // -1 .. 1 approx near neighbors
   const rot = Math.max(-3, Math.min(3, 3 * Math.sign(t) * Math.min(1, Math.abs(t))));
   return {
-    transform: `rotate(${rot.toFixed(3)}deg)`,
+    transform: `rotate(${rot.toFixed(3)}deg) translateY(${(offset * t) / 12}px)`,
   };
 }
 
@@ -184,15 +191,15 @@ onUnmounted(() => {
 });
 
 // react on activeIndex change to animate tilts smoothly
-watch(activeIndex, () => {
-  if (!track.value) return;
-  const slides = Array.from(track.value.children) as HTMLElement[];
-  slides.forEach((el, i) => {
-    const rel = i - activeIndex.value;
-    const rot = rel === 0 ? 0 : rel < 0 ? -3 : 3;
-    gsap.to(el, { rotate: rot, duration: 0.25, ease: 'power2.out' });
-  });
-});
+// watch(activeIndex, () => {
+//   if (!track.value) return;
+//   const slides = Array.from(track.value.children) as HTMLElement[];
+//   slides.forEach((el, i) => {
+//     const rel = i - activeIndex.value;
+//     const rot = rel === 0 ? 0 : rel < 0 ? -3 : 3;
+//     gsap.to(el, { rotate: rot, duration: 0.25, ease: 'power2.out' });
+//   });
+// });
 </script>
 
 <style scoped>
@@ -203,7 +210,6 @@ watch(activeIndex, () => {
   background: transparent;
 }
 .h-carousel__viewport {
-  overflow: hidden;
   width: 100%;
   touch-action: none;
   overscroll-behavior: contain;
@@ -217,14 +223,15 @@ watch(activeIndex, () => {
   user-select: none;
   cursor: grab;
   touch-action: none;
+  position: relative;
 }
 .h-carousel__track:active {
   cursor: grabbing;
 }
 
 .h-carousel__slide {
-  flex: 0 0 var(--card-width, 320px);
-  height: 200px;
+  flex: 0 0 var(--card-width, 250px);
+  height: 386px;
   border-radius: 16px;
   background: #2b2b2b;
   color: #fff;
@@ -237,5 +244,17 @@ watch(activeIndex, () => {
 }
 .h-carousel__slide.is-active {
   //box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+}
+
+.string {
+  width: 2px;
+  background: white;
+  height: 450px;
+  position: absolute;
+  top: -450px;
+}
+
+img {
+  width: 250px;
 }
 </style>

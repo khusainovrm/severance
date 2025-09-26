@@ -13,24 +13,27 @@
         </div>
         <div class="cards__spacer relative" ref="badgeTriggerAnimationRef">
           <!-- бейдж -->
-          <div class="badge-wrapper z-0">
-            <HorizontalCarousel class="relative z-10" />
+          <div class="badge-wrapper z-0 overflow-hidden">
             <div class="string" :style="{ height: stringHeight + 'px' }"></div>
             <div
               ref="badgeRef"
-              class="badge"
+              class="badge w-full z-10"
               :style="{ transform: `translateY(${badgeOffset}px)` }"
             >
-              <HorizontalCarousel class="relative z-10" />
-              <img src="../assets/badge.png" alt="badge" />
+              <HorizontalCarousel
+                class="relative z-10"
+                :class="{ 'pointer-events-none': badgeProgress !== 1 }"
+              />
             </div>
           </div>
         </div>
       </div>
 
-      <div class="block bg-amber-200">Второй блок</div>
+      <div class="block bg-amber-200">
+        <Cup />
+      </div>
       <div class="block bg-gray-400 overflow-hidden">
-        <HorizontalCarousel class="relative z-10" />
+        <!--        <HorizontalCarousel class="relative z-10" />-->
       </div>
     </section>
 
@@ -41,7 +44,7 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, onMounted, onUnmounted, ref } from 'vue';
+import { onMounted, onUnmounted, ref } from 'vue';
 import * as THREE from 'three';
 import gsap from 'gsap';
 import ScrollTrigger from 'gsap/ScrollTrigger';
@@ -51,6 +54,8 @@ import chair2 from '../assets/char2.png';
 import vertexShaderCode from './shaders/vertex.glsl?raw';
 import fragmentShaderCode from './shaders/fragment.glsl?raw';
 import HorizontalCarousel from './HorizontalCarousel.vue';
+import { isMobile } from './utils.ts';
+import Cup from './Cup.vue';
 
 const START_BADGE_OFFSET = 250;
 const BAGE_MOVE = 175;
@@ -93,10 +98,6 @@ const onResize = () => {
   renderer.setSize(width, height, false);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 };
-
-function isMobile() {
-  return /Android|iPhone|iPad|iPod|Opera Mini|IEMobile|WPDesktop/i.test(navigator.userAgent);
-}
 
 onMounted(() => {
   // canvas
@@ -391,7 +392,7 @@ canvas {
   background-color: black;
 }
 .cards__spacer {
-  height: 60dvh;
+  height: 100dvh;
 }
 
 .card {
@@ -410,15 +411,15 @@ canvas {
   display: flex;
   flex-direction: column;
   align-items: center;
-  pointer-events: none;
 }
 
 .string {
   width: 2px;
   background: white;
+  visibility: hidden;
 }
 
 .badge {
-  width: 160px;
+  width: 100dvw;
 }
 </style>

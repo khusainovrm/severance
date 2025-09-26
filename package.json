@@ -14,7 +14,8 @@
     "gsap": "3.10.1",
     "tailwindcss": "^4.1.13",
     "three": "0.180.0",
-    "vue": "^3.5.18"
+    "vue": "^3.5.18",
+    "tweakpane": "4.0.5"
   },
   "devDependencies": {
     "@types/three": "0.180.0",
