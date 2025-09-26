@@ -1,7 +1,5 @@
 <template>
-  <div>
-    <canvas ref="canvas"></canvas>
-  </div>
+  <canvas ref="canvas"></canvas>
 </template>
 
 <script setup lang="ts">
@@ -9,6 +7,23 @@ import { onMounted, onUnmounted, ref, reactive } from 'vue';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import { Pane } from 'tweakpane';
+import { string } from 'three/src/Three.TSL';
+
+interface CupProps {
+  title: string;
+  titleColor?: string;
+  subtitle?: string;
+  subtitleColor?: string;
+}
+
+const props = withDefaults(defineProps<{ cups: CupProps[] }>(), {
+  cups: () => [
+    {
+      title: 'Спасибо за такое атмосферное мероприятие!',
+      subtitle: 'Отличная организация, тематические локации и перформанс!',
+    },
+  ],
+});
 
 const canvas = ref<HTMLCanvasElement | null>(null);
 
@@ -16,6 +31,20 @@ let camera: any;
 let renderer: any;
 let controls: any;
 let pane: Pane | null = null;
+let dirLight: THREE.DirectionalLight | null = null;
+
+const sceneSettings = reactive({
+  camera: {
+    fov: 85,
+    position: { x: 0, y: 4, z: 7 },
+    target: { x: 0, y: 2, z: 0 },
+  },
+  light: {
+    color: '#ffffff',
+    intensity: 3,
+    position: { x: 0, y: 4, z: 0 },
+  },
+});
 
 const cupSizes = reactive({
   // common geometrical parameters
@@ -23,6 +52,8 @@ const cupSizes = reactive({
   outerRadius: 2,
   wallThickness: 0.2,
   radialSegments: 64,
+  // distance between cups along X
+  spacingX: 6,
   // horizontal offset of the text texture around the cup (UV.x)
   textureOffsetX: 0.52,
   // how far the liquid surface is below the top edge
@@ -53,14 +84,24 @@ const cupSizes = reactive({
   },
 });
 
+// Initialize text content/colors from the first cup in props (if provided)
+if (Array.isArray(props.cups) && props.cups.length > 0) {
+  const first = props.cups[0];
+  if (first.title) cupSizes.text.title.content = first.title;
+  if (first.titleColor) cupSizes.text.title.color = first.titleColor;
+  if (first.subtitle !== undefined) cupSizes.text.subtitle.content = first.subtitle || '';
+  if (first.subtitleColor) cupSizes.text.subtitle.color = first.subtitleColor;
+}
+
 const getInnerRadius = () => cupSizes.outerRadius - cupSizes.wallThickness;
 
 const onResize = () => {
-  if (!canvas.value || !renderer || !camera) {
+  if (!canvas.value?.parentElement || !renderer || !camera) {
     return;
   }
-  const width = window.innerWidth;
-  const height = window.innerHeight;
+  const { width, height } = canvas.value.parentElement.getBoundingClientRect();
+  // const width = window.innerWidth;
+  // const height = window.innerHeight;
 
   // Update camera
   camera.aspect = width / height || 1;
@@ -71,17 +112,18 @@ const onResize = () => {
 };
 
 onMounted(() => {
-  if (!canvas.value) {
+  if (!canvas.value?.parentElement) {
     return;
   }
   // canvas
-  const width = window.innerWidth;
-  const height = window.innerHeight;
+  const { width, height } = canvas.value.parentElement.getBoundingClientRect();
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color('#1f1f1f');
+  const axesHelper = new THREE.AxesHelper(5);
+  scene.add(axesHelper);
+  scene.background = null;
 
-  camera = new THREE.PerspectiveCamera(85, width / height, 0.1, 100);
+  camera = new THREE.PerspectiveCamera(sceneSettings.camera.fov, width / height, 0.1, 100);
   // camera = new THREE.OrthographicCamera(
   //   width / -80,
   //   width / 80,
@@ -90,23 +132,44 @@ onMounted(() => {
   //   1,
   //   1000,
   // );
-  camera.position.set(0, 4, 7);
+  camera.position.set(
+    sceneSettings.camera.position.x,
+    sceneSettings.camera.position.y,
+    sceneSettings.camera.position.z,
+  );
 
-  renderer = new THREE.WebGLRenderer({ canvas: canvas.value, antialias: true });
+  renderer = new THREE.WebGLRenderer({ canvas: canvas.value, antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.setSize(width, height, false);
+  // Make the canvas fully transparent so underlying CSS background is visible
+  renderer.setClearColor(0x000000, 0);
 
-  controls = new OrbitControls(camera, renderer.domElement);
-  controls.enableDamping = true;
-  // Prevent the camera from going below the horizon relative to the target
-  controls.maxPolarAngle = Math.PI / 2; // look no further down than the horizon
-  // Keep panning parallel to the ground plane so Y doesn't change while panning
-  controls.screenSpacePanning = false;
+  // Contorls
+  // controls = new OrbitControls(camera, renderer.domElement);
+  // controls.enableDamping = true;
+  // // Prevent the camera from going below the horizon relative to the target
+  // controls.maxPolarAngle = Math.PI / 2; // look no further down than the horizon
+  // // Keep panning parallel to the ground plane so Y doesn't change while panning
+  // controls.screenSpacePanning = false;
+  // // Apply initial target for where the camera looks
+  // controls.target.set(
+  //   sceneSettings.camera.target.x,
+  //   sceneSettings.camera.target.y,
+  //   sceneSettings.camera.target.z,
+  // );
+  // controls.update();
 
   // Свет для toon-материала
-  const light = new THREE.DirectionalLight('#ffffff', 3);
-  light.position.set(0, 4, 0);
-  scene.add(light);
+  dirLight = new THREE.DirectionalLight(
+    sceneSettings.light.color as any,
+    sceneSettings.light.intensity,
+  );
+  dirLight.position.set(
+    sceneSettings.light.position.x,
+    sceneSettings.light.position.y,
+    sceneSettings.light.position.z,
+  );
+  scene.add(dirLight);
 
   // === КРУЖКА ===
   const cupGourp = new THREE.Group();
@@ -155,6 +218,7 @@ onMounted(() => {
   // Отрисовка текста по центру, в области шириной пол-оборота
   const updateCanvasTexture = () => {
     const { width, height } = computeCanvasSize();
+    const sizeChanged = canvasText.width !== width || canvasText.height !== height;
     // При изменении размеров важно обновлять width/height до рисования — это очистит канвас
     canvasText.width = width;
     canvasText.height = height;
@@ -221,15 +285,40 @@ onMounted(() => {
     }
 
     textTexture.needsUpdate = true;
+    if (sizeChanged) {
+      recreateTextTexture();
+    }
   };
 
   // === текстура ===
-  const textTexture = new THREE.CanvasTexture(canvasText);
+  let textTexture: THREE.CanvasTexture = new THREE.CanvasTexture(canvasText);
   textTexture.needsUpdate = true;
   textTexture.wrapS = THREE.RepeatWrapping;
   textTexture.wrapT = THREE.RepeatWrapping;
   // Смещение текста по окружности
   textTexture.offset.x = cupSizes.textureOffsetX;
+
+  // Предварительное объявление материала кружки, чтобы избежать TDZ в recreateTextTexture
+  let cupMaterial: THREE.MeshToonMaterial | null = null;
+
+  // При смене размеров канваса пересоздаём текстуру и переназначаем материал
+  function recreateTextTexture() {
+    const old = textTexture;
+    const newTex = new THREE.CanvasTexture(canvasText);
+    newTex.wrapS = THREE.RepeatWrapping;
+    newTex.wrapT = THREE.RepeatWrapping;
+    newTex.offset.x = cupSizes.textureOffsetX;
+    newTex.needsUpdate = true;
+    newTex.generateMipmaps = false;
+    newTex.minFilter = THREE.LinearFilter;
+    newTex.magFilter = THREE.LinearFilter;
+    textTexture = newTex;
+    if (cupMaterial) {
+      cupMaterial.map = newTex;
+      cupMaterial.needsUpdate = true;
+    }
+    old.dispose?.();
+  }
 
   // Первый рендер текста
   updateCanvasTexture();
@@ -245,11 +334,12 @@ onMounted(() => {
     1,
     true,
   );
-  const cupMaterial = new THREE.MeshToonMaterial({
+  cupMaterial = new THREE.MeshToonMaterial({
     map: textTexture,
     // emissive: '#0e586b',
   });
-  const cup = new THREE.Mesh(cupGeometry, cupMaterial);
+  const cup = new THREE.Mesh(cupGeometry, cupMaterial!);
+  cup.name = 'cup';
   cupGourp.add(cup);
 
   // Внутренняя часть кружки
@@ -263,6 +353,7 @@ onMounted(() => {
   );
   const innerMaterial = new THREE.MeshToonMaterial({ color: '#325aaa', side: THREE.DoubleSide }); // голубая заливка
   const inner = new THREE.Mesh(innerGeometry, innerMaterial);
+  inner.name = 'inner';
   inner.position.y = 0.01; // чуть выше, чтобы не было "Z-fighting"
   cupGourp.add(inner);
 
@@ -276,6 +367,7 @@ onMounted(() => {
     color: '#62adbf',
   });
   const borderCup = new THREE.Mesh(geometryCupBorder, innerCupBorderMaterial);
+  borderCup.name = 'border';
   borderCup.rotation.x = -Math.PI / 2;
   borderCup.position.y = cupSizes.height / 2; // top edge
   cupGourp.add(borderCup);
@@ -292,6 +384,7 @@ onMounted(() => {
   const coffeeGeometry = new THREE.CircleGeometry(getInnerRadius(), cupSizes.radialSegments);
   const coffeeMaterial = new THREE.MeshToonMaterial({ color: '#2b1a0a' }); // тёмно-коричневый
   const coffee = new THREE.Mesh(coffeeGeometry, coffeeMaterial);
+  coffee.name = 'coffee';
   coffee.rotation.x = -Math.PI / 2;
   coffee.position.y = cupSizes.height / 2 - cupSizes.liquidOffsetFromTop;
   cupGourp.add(coffee);
@@ -306,11 +399,51 @@ onMounted(() => {
   );
   const handleMaterial = new THREE.MeshToonMaterial({ color: '#62adbf' });
   const handle = new THREE.Mesh(handleGeometry, handleMaterial);
+  handle.name = 'handle';
   handle.rotation.z = -Math.PI / 2;
   handle.position.set(cupSizes.outerRadius, 0, 0);
   cupGourp.add(handle);
-
+  cupGourp.position.set(0, cupSizes.height / 2, 0);
   scene.add(cupGourp);
+
+  // Additional cups to the right based on props.cups length
+  const cupGroups: THREE.Group[] = [cupGourp];
+  if (Array.isArray(props.cups) && props.cups.length > 1) {
+    for (let i = 1; i < props.cups.length; i++) {
+      const clone = cupGourp.clone(true);
+      clone.position.set(i * cupSizes.spacingX, cupSizes.height / 2, 0);
+      scene.add(clone);
+      cupGroups.push(clone);
+    }
+  }
+
+  const repositionGroups = () => {
+    for (let i = 0; i < cupGroups.length; i++) {
+      cupGroups[i].position.set(i * cupSizes.spacingX, cupSizes.height / 2, 0);
+    }
+  };
+
+  const syncGeometriesToClones = () => {
+    const src = cupGourp;
+    const srcCup = src.getObjectByName('cup') as THREE.Mesh | null;
+    const srcInner = src.getObjectByName('inner') as THREE.Mesh | null;
+    const srcBorder = src.getObjectByName('border') as THREE.Mesh | null;
+    const srcCoffee = src.getObjectByName('coffee') as THREE.Mesh | null;
+    const srcHandle = src.getObjectByName('handle') as THREE.Mesh | null;
+    for (let i = 1; i < cupGroups.length; i++) {
+      const g = cupGroups[i];
+      const dstCup = g.getObjectByName('cup') as THREE.Mesh | null;
+      const dstInner = g.getObjectByName('inner') as THREE.Mesh | null;
+      const dstBorder = g.getObjectByName('border') as THREE.Mesh | null;
+      const dstCoffee = g.getObjectByName('coffee') as THREE.Mesh | null;
+      const dstHandle = g.getObjectByName('handle') as THREE.Mesh | null;
+      if (dstCup && srcCup) dstCup.geometry = srcCup.geometry;
+      if (dstInner && srcInner) dstInner.geometry = srcInner.geometry;
+      if (dstBorder && srcBorder) dstBorder.geometry = srcBorder.geometry;
+      if (dstCoffee && srcCoffee) dstCoffee.geometry = srcCoffee.geometry;
+      if (dstHandle && srcHandle) dstHandle.geometry = srcHandle.geometry;
+    }
+  };
 
   // === Функция обновления геометрий под текущие cupSizes ===
   const updateGeometries = () => {
@@ -368,13 +501,152 @@ onMounted(() => {
     handle.geometry.dispose?.();
     handle.geometry = newHandleGeometry;
     handle.position.set(cupSizes.outerRadius, 0, 0);
+    // Sync clone geometries and reposition all groups
+    syncGeometriesToClones();
+    repositionGroups();
   };
 
   // === Tweakpane ===
-  pane = new Pane({ title: 'Cup Sizes' });
+  pane = new Pane({ title: 'Cup Settings', expanded: false });
   const gMain = pane.addFolder({ title: 'Main' });
   const gHandle = pane.addFolder({ title: 'Handle' });
   const gText = pane.addFolder({ title: 'Text' });
+  const gCamera = pane.addFolder({ title: 'Camera' });
+  const gLight = pane.addFolder({ title: 'Light' });
+
+  // Camera bindings
+  const bFov = gCamera.addBinding(sceneSettings.camera, 'fov', { min: 10, max: 120, step: 1 });
+  bFov.on('change', () => {
+    if (!camera) return;
+    camera.fov = sceneSettings.camera.fov;
+    camera.updateProjectionMatrix();
+  });
+  const bCamX = gCamera.addBinding(sceneSettings.camera.position, 'x', {
+    min: -20,
+    max: 20,
+    step: 0.1,
+  });
+  bCamX.on('change', () => {
+    camera?.position.set(
+      sceneSettings.camera.position.x,
+      sceneSettings.camera.position.y,
+      sceneSettings.camera.position.z,
+    );
+  });
+  const bCamY = gCamera.addBinding(sceneSettings.camera.position, 'y', {
+    min: -20,
+    max: 20,
+    step: 0.1,
+  });
+  bCamY.on('change', () => {
+    camera?.position.set(
+      sceneSettings.camera.position.x,
+      sceneSettings.camera.position.y,
+      sceneSettings.camera.position.z,
+    );
+  });
+  const bCamZ = gCamera.addBinding(sceneSettings.camera.position, 'z', {
+    min: -20,
+    max: 20,
+    step: 0.1,
+  });
+  bCamZ.on('change', () => {
+    camera?.position.set(
+      sceneSettings.camera.position.x,
+      sceneSettings.camera.position.y,
+      sceneSettings.camera.position.z,
+    );
+  });
+  // Camera target (look at) bindings
+  const bTarX = gCamera.addBinding(sceneSettings.camera.target, 'x', {
+    min: -20,
+    max: 20,
+    step: 0.1,
+  });
+  bTarX.on('change', () => {
+    controls?.target.set(
+      sceneSettings.camera.target.x,
+      sceneSettings.camera.target.y,
+      sceneSettings.camera.target.z,
+    );
+    controls?.update();
+  });
+  const bTarY = gCamera.addBinding(sceneSettings.camera.target, 'y', {
+    min: -20,
+    max: 20,
+    step: 0.1,
+  });
+  bTarY.on('change', () => {
+    controls?.target.set(
+      sceneSettings.camera.target.x,
+      sceneSettings.camera.target.y,
+      sceneSettings.camera.target.z,
+    );
+    controls?.update();
+  });
+  const bTarZ = gCamera.addBinding(sceneSettings.camera.target, 'z', {
+    min: -20,
+    max: 20,
+    step: 0.1,
+  });
+  bTarZ.on('change', () => {
+    controls?.target.set(
+      sceneSettings.camera.target.x,
+      sceneSettings.camera.target.y,
+      sceneSettings.camera.target.z,
+    );
+    controls?.update();
+  });
+
+  // Light bindings
+  const bLightColor = gLight.addBinding(sceneSettings.light, 'color');
+  bLightColor.on('change', () => {
+    if (dirLight) dirLight.color = new THREE.Color(sceneSettings.light.color as any);
+  });
+  const bLightIntensity = gLight.addBinding(sceneSettings.light, 'intensity', {
+    min: 0,
+    max: 10,
+    step: 0.01,
+  });
+  bLightIntensity.on('change', () => {
+    if (dirLight) dirLight.intensity = sceneSettings.light.intensity;
+  });
+  const bLightX = gLight.addBinding(sceneSettings.light.position, 'x', {
+    min: -20,
+    max: 20,
+    step: 0.1,
+  });
+  bLightX.on('change', () => {
+    dirLight?.position.set(
+      sceneSettings.light.position.x,
+      sceneSettings.light.position.y,
+      sceneSettings.light.position.z,
+    );
+  });
+  const bLightY = gLight.addBinding(sceneSettings.light.position, 'y', {
+    min: -20,
+    max: 20,
+    step: 0.1,
+  });
+  bLightY.on('change', () => {
+    dirLight?.position.set(
+      sceneSettings.light.position.x,
+      sceneSettings.light.position.y,
+      sceneSettings.light.position.z,
+    );
+  });
+  const bLightZ = gLight.addBinding(sceneSettings.light.position, 'z', {
+    min: -20,
+    max: 20,
+    step: 0.1,
+  });
+  bLightZ.on('change', () => {
+    dirLight?.position.set(
+      sceneSettings.light.position.x,
+      sceneSettings.light.position.y,
+      sceneSettings.light.position.z,
+    );
+  });
 
   // Binding to shift text texture horizontally around the cup
   const bTex = gMain.addBinding(cupSizes, 'textureOffsetX', { min: -1, max: 1, step: 0.01 });
@@ -436,6 +708,10 @@ onMounted(() => {
     gHandle.addBinding(cupSizes.handle, 'tubeRadius', { min: 0.05, max: 1, step: 0.01 }),
     gHandle.addBinding(cupSizes.handle, 'arc', { min: Math.PI / 4, max: Math.PI * 2, step: 0.01 }),
   ];
+  const bSpacing = gMain.addBinding(cupSizes, 'spacingX', { min: 0.1, max: 20, step: 0.1 });
+  bSpacing.on('change', () => {
+    repositionGroups();
+  });
   bindings.forEach((b) =>
     b.on('change', () => {
       updateGeometries();
@@ -454,6 +730,7 @@ onMounted(() => {
           outerRadius: cupSizes.outerRadius,
           wallThickness: cupSizes.wallThickness,
           radialSegments: cupSizes.radialSegments,
+          spacingX: cupSizes.spacingX,
           textureOffsetX: cupSizes.textureOffsetX,
           liquidOffsetFromTop: cupSizes.liquidOffsetFromTop,
           text: {
@@ -477,6 +754,28 @@ onMounted(() => {
             ringRadius: cupSizes.handle.ringRadius,
             tubeRadius: cupSizes.handle.tubeRadius,
             arc: cupSizes.handle.arc,
+          },
+          camera: {
+            fov: sceneSettings.camera.fov,
+            position: {
+              x: sceneSettings.camera.position.x,
+              y: sceneSettings.camera.position.y,
+              z: sceneSettings.camera.position.z,
+            },
+            target: {
+              x: sceneSettings.camera.target.x,
+              y: sceneSettings.camera.target.y,
+              z: sceneSettings.camera.target.z,
+            },
+          },
+          light: {
+            color: sceneSettings.light.color,
+            intensity: sceneSettings.light.intensity,
+            position: {
+              x: sceneSettings.light.position.x,
+              y: sceneSettings.light.position.y,
+              z: sceneSettings.light.position.z,
+            },
           },
         }),
       );
@@ -504,7 +803,7 @@ onMounted(() => {
   // === Рендер цикл ===
   function animate() {
     requestAnimationFrame(animate);
-    controls.update();
+    controls?.update();
     renderer.render(scene, camera);
   }
 
@@ -531,5 +830,6 @@ canvas {
   width: 100%;
   height: 100%;
   display: block;
+  background: transparent; /* allow CSS page background to show through */
 }
 </style>

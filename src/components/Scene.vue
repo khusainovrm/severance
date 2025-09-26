@@ -29,8 +29,8 @@
         </div>
       </div>
 
-      <div class="block bg-amber-200">
-        <Cup />
+      <div class="w-full h-[50dvh]">
+        <Cup :cups="[{ title: 'Hello' }, { title: 'World' }, { title: 'Severance' }]" />
       </div>
       <div class="block bg-gray-400 overflow-hidden">
         <!--        <HorizontalCarousel class="relative z-10" />-->
@@ -62,8 +62,8 @@ const BAGE_MOVE = 175;
 
 gsap.registerPlugin(ScrollTrigger);
 
-// ScrollTrigger.config({ ignoreMobileResize: true }); // fix issue with viewport on resize
-ScrollTrigger.normalizeScroll(isMobile()); // mobile address bar will always be present
+ScrollTrigger.config({ ignoreMobileResize: true }); // fix issue with viewport on resize
+// ScrollTrigger.normalizeScroll(isMobile()); // mobile address bar will always be present
 
 const canvas = ref<HTMLCanvasElement | null>(null);
 const sceneSection = ref<HTMLElement | null>(null);
@@ -354,7 +354,7 @@ canvas {
 }
 .content {
   min-height: 200dvh;
-  background: #f0f0f0;
+  background: #1f1f1f;
 }
 .block {
   min-height: 100dvh;
@@ -377,7 +377,7 @@ canvas {
 .cards-section {
   position: relative;
   //min-height: 200vh;
-  background: #000000;
+  background: #1f1f1f;
   color: white;
 }
 
@@ -389,7 +389,7 @@ canvas {
   flex-wrap: wrap;
   gap: 10px;
   padding: 10px 10px 0 10px;
-  background-color: black;
+  background-color: #1f1f1f;
 }
 .cards__spacer {
   height: 100dvh;

@@ -1,5 +1,5 @@
 <template>
-  <Cup />
+  <Scene />
 </template>
 
 <script setup lang="ts">
